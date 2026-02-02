@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types';
-import { findExistingMoltbotProcess } from '../gateway';
+import { findExistingMoltbotProcess, isGatewayCurrentVersion, computeConfigHash } from '../gateway';
 
 /**
  * Debug routes for inspecting container state
@@ -384,6 +384,29 @@ debug.get('/container-config', async (c) => {
       config,
       raw: config ? undefined : stdout,
       stderr,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: errorMessage }, 500);
+  }
+});
+
+// GET /debug/version-check - Check if gateway config is current
+debug.get('/version-check', async (c) => {
+  const sandbox = c.get('sandbox');
+
+  try {
+    const versionCheck = await isGatewayCurrentVersion(sandbox, c.env);
+    const gatewayProcess = await findExistingMoltbotProcess(sandbox);
+
+    return c.json({
+      gateway_running: !!gatewayProcess,
+      gateway_status: gatewayProcess?.status || 'not_running',
+      config_current: versionCheck.current,
+      expected_hash: versionCheck.expectedHash,
+      running_hash: versionCheck.runningHash,
+      reason: versionCheck.reason || (versionCheck.current ? 'Config matches' : 'Config mismatch'),
+      action_needed: !versionCheck.current ? 'Gateway will restart on next request' : 'None',
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

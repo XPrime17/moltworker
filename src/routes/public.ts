@@ -63,4 +63,46 @@ publicRoutes.get('/_admin/assets/*', async (c) => {
   return c.env.ASSETS.fetch(new Request(assetUrl.toString(), c.req.raw));
 });
 
+// GET /debug-public - Temporary public debug endpoint (no auth)
+publicRoutes.get('/debug-public', async (c) => {
+  const sandbox = c.get('sandbox');
+  const results: Record<string, unknown> = {};
+
+  try {
+    // Get process list
+    const processes = await sandbox.listProcesses();
+    results.processes = processes.map(p => ({
+      id: p.id,
+      command: p.command,
+      status: p.status,
+    }));
+
+    // Get gateway process logs
+    const gatewayProc = processes.find(p =>
+      p.command.includes('clawdbot gateway') || p.command.includes('start-moltbot')
+    );
+    if (gatewayProc) {
+      const logs = await gatewayProc.getLogs();
+      results.gatewayLogs = {
+        stdout: logs.stdout?.slice(-3000) || '',
+        stderr: logs.stderr?.slice(-1000) || '',
+      };
+    }
+
+    // Check config
+    const configProc = await sandbox.startProcess('cat /root/.clawdbot/clawdbot.json');
+    await new Promise(r => setTimeout(r, 2000));
+    const configLogs = await configProc.getLogs();
+    try {
+      results.config = JSON.parse(configLogs.stdout || '{}');
+    } catch {
+      results.configRaw = configLogs.stdout;
+    }
+
+    return c.json(results);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 export { publicRoutes };

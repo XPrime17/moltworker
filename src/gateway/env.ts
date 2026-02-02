@@ -1,13 +1,17 @@
 import type { MoltbotEnv } from '../types';
+import { computeConfigHash } from './version';
 
 /**
  * Build environment variables to pass to the Moltbot container process
- * 
+ *
  * @param env - Worker environment bindings
  * @returns Environment variables record
  */
 export function buildEnvVars(env: MoltbotEnv): Record<string, string> {
   const envVars: Record<string, string> = {};
+
+  // Add config hash for version-aware gateway lifecycle
+  envVars.CONFIG_HASH = computeConfigHash(env);
 
   // Normalize the base URL by removing trailing slashes
   const normalizedBaseUrl = env.AI_GATEWAY_BASE_URL?.replace(/\/+$/, '');

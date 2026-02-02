@@ -8,11 +8,19 @@
 
 set -e
 
-# Check if clawdbot gateway is already running - bail early if so
+# Store config hash for version-aware gateway lifecycle
+# This allows the worker to detect when config changes require a restart
+if [ -n "$CONFIG_HASH" ]; then
+    echo "$CONFIG_HASH" > /tmp/gateway-config-hash
+    echo "Config hash: $CONFIG_HASH"
+fi
+
+# Kill any existing gateway to ensure fresh start with latest config
 # Note: CLI is still named "clawdbot" until upstream renames it
 if pgrep -f "clawdbot gateway" > /dev/null 2>&1; then
-    echo "Moltbot gateway is already running, exiting."
-    exit 0
+    echo "Killing existing gateway to apply latest config..."
+    pkill -f "clawdbot gateway" || true
+    sleep 2
 fi
 
 # Paths (clawdbot paths are used internally - upstream hasn't renamed yet)
@@ -183,12 +191,17 @@ if (process.env.CLAWDBOT_DEV_MODE === 'true') {
 }
 
 // Telegram configuration
+// Note: dmPolicy and allowFrom must be at the telegram config root level, NOT nested under "dm"
 if (process.env.TELEGRAM_BOT_TOKEN) {
     config.channels.telegram = config.channels.telegram || {};
     config.channels.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN;
     config.channels.telegram.enabled = true;
     const telegramDmPolicy = process.env.TELEGRAM_DM_POLICY || 'pairing';
     config.channels.telegram.dmPolicy = telegramDmPolicy;
+    config.channels.telegram.groupPolicy = 'allowlist';
+    config.channels.telegram.streamMode = 'partial';
+    // Remove any invalid nested "dm" key from previous versions
+    delete config.channels.telegram.dm;
     if (process.env.TELEGRAM_DM_ALLOW_FROM) {
         // Explicit allowlist: "123,456,789" → ['123', '456', '789']
         config.channels.telegram.allowFrom = process.env.TELEGRAM_DM_ALLOW_FROM.split(',');
@@ -196,6 +209,12 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
         // "open" policy requires allowFrom: ["*"]
         config.channels.telegram.allowFrom = ['*'];
     }
+
+    // Enable telegram plugin (required for channel to actually start)
+    config.plugins = config.plugins || {};
+    config.plugins.entries = config.plugins.entries || {};
+    config.plugins.entries.telegram = config.plugins.entries.telegram || {};
+    config.plugins.entries.telegram.enabled = true;
 }
 
 // Discord configuration
@@ -273,10 +292,12 @@ if (isOpenAI) {
     config.agents.defaults.models['anthropic/claude-opus-4-5-20251101'] = { alias: 'Opus 4.5' };
     config.agents.defaults.models['anthropic/claude-sonnet-4-5-20250929'] = { alias: 'Sonnet 4.5' };
     config.agents.defaults.models['anthropic/claude-haiku-4-5-20251001'] = { alias: 'Haiku 4.5' };
-    config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5-20251101';
+    // Use Sonnet as default - Opus has very low rate limits (10k tokens/min)
+    config.agents.defaults.model.primary = 'anthropic/claude-sonnet-4-5-20250929';
 } else {
     // Default to Anthropic without custom base URL (uses built-in pi-ai catalog)
-    config.agents.defaults.model.primary = 'anthropic/claude-opus-4-5';
+    // Use Sonnet as default - Opus has very low rate limits (10k tokens/min)
+    config.agents.defaults.model.primary = 'anthropic/claude-sonnet-4-5';
 }
 
 // Write updated config
@@ -298,6 +319,26 @@ rm -f "$CONFIG_DIR/gateway.lock" 2>/dev/null || true
 
 BIND_MODE="lan"
 echo "Dev mode: ${CLAWDBOT_DEV_MODE:-false}, Bind mode: $BIND_MODE"
+echo "TELEGRAM_BOT_TOKEN set: ${TELEGRAM_BOT_TOKEN:+yes}"
+echo "TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
+
+# Show full config for debugging
+echo "=== FULL CONFIG ==="
+cat "$CONFIG_FILE"
+echo "=== END CONFIG ==="
+
+# Check clawdbot version
+echo "Clawdbot version: $(clawdbot --version 2>&1)"
+
+# Export all telegram vars
+export TELEGRAM_BOT_TOKEN
+export TELEGRAM_DM_POLICY
+
+# Debug environment
+echo "Environment check:"
+echo "  TELEGRAM_BOT_TOKEN set: ${TELEGRAM_BOT_TOKEN:+yes}"
+echo "  TELEGRAM_DM_POLICY: ${TELEGRAM_DM_POLICY:-not set}"
+echo "  CLAWDBOT_GATEWAY_TOKEN set: ${CLAWDBOT_GATEWAY_TOKEN:+yes}"
 
 if [ -n "$CLAWDBOT_GATEWAY_TOKEN" ]; then
     echo "Starting gateway with token auth..."

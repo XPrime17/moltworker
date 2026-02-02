@@ -189,6 +189,26 @@ app.use('*', async (c, next) => {
 
 // Middleware: Cloudflare Access authentication for protected routes
 app.use('*', async (c, next) => {
+  const url = new URL(c.req.url);
+
+  // Skip auth for public routes (these are mounted before this middleware but
+  // Hono's wildcard middleware still runs for all routes)
+  const publicPaths = [
+    '/sandbox-health',
+    '/api/status',
+    '/debug-public',
+    '/logo.png',
+    '/logo-small.png',
+    '/cdp',
+  ];
+  if (publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path + '/'))) {
+    return next();
+  }
+  // Also skip for admin assets (needed for login page styling)
+  if (url.pathname.startsWith('/_admin/assets/')) {
+    return next();
+  }
+
   // Determine response type based on Accept header
   const acceptsHtml = c.req.header('Accept')?.includes('text/html');
   const middleware = createAccessMiddleware({
@@ -417,7 +437,7 @@ app.all('*', async (c) => {
 
 /**
  * Scheduled handler for cron triggers.
- * Syncs moltbot config/state from container to R2 for persistence.
+ * Ensures gateway is running (for Telegram/Discord polling) and syncs to R2.
  */
 async function scheduled(
   _event: ScheduledEvent,
@@ -426,6 +446,47 @@ async function scheduled(
 ): Promise<void> {
   const options = buildSandboxOptions(env);
   const sandbox = getSandbox(env.Sandbox, 'moltbot', options);
+
+  // Ensure gateway is running with current config (version-aware)
+  // This will only restart if config hash changed, otherwise reuses existing gateway
+  console.log('[cron] Ensuring gateway is running with current config...');
+  try {
+    await ensureMoltbotGateway(sandbox, env);
+    console.log('[cron] Gateway is running with current config');
+  } catch (err) {
+    console.error('[cron] Failed to ensure gateway:', err);
+  }
+
+  // Debug: Get process list and gateway logs
+  try {
+    const processes = await sandbox.listProcesses();
+    console.log('[cron] Processes:', processes.map(p => ({ id: p.id, cmd: p.command, status: p.status })));
+
+    // Find gateway process and get its logs
+    const gatewayProc = processes.find(p =>
+      p.command.includes('clawdbot gateway') || p.command.includes('start-moltbot')
+    );
+    if (gatewayProc) {
+      const logs = await gatewayProc.getLogs();
+      console.log('[cron] Gateway stdout (last 4000 chars):', logs.stdout?.slice(-4000) || '(none)');
+      if (logs.stderr) {
+        console.log('[cron] Gateway stderr (last 2000 chars):', logs.stderr?.slice(-2000) || '(none)');
+      }
+    }
+
+    // Test Telegram connectivity from inside container
+    if (env.TELEGRAM_BOT_TOKEN) {
+      console.log('[cron] Testing Telegram connectivity...');
+      const testProc = await sandbox.startProcess(
+        `curl -s "https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe" | head -500`
+      );
+      await new Promise(r => setTimeout(r, 5000));
+      const testLogs = await testProc.getLogs();
+      console.log('[cron] Telegram test result:', testLogs.stdout || testLogs.stderr || '(no output)');
+    }
+  } catch (debugErr) {
+    console.error('[cron] Debug info failed:', debugErr);
+  }
 
   console.log('[cron] Starting backup sync to R2...');
   const result = await syncToR2(sandbox, env);
