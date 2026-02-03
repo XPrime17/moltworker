@@ -161,6 +161,11 @@ config.agents.defaults.model = config.agents.defaults.model || {};
 config.gateway = config.gateway || {};
 config.channels = config.channels || {};
 
+// Context pruning - keep conversations for 24 hours (not 1 hour)
+config.agents.defaults.contextPruning = config.agents.defaults.contextPruning || {};
+config.agents.defaults.contextPruning.mode = 'cache-ttl';
+config.agents.defaults.contextPruning.ttl = '24h';
+
 // Clean up any broken anthropic provider config from previous runs
 // (older versions didn't include required 'name' field)
 if (config.models?.providers?.anthropic?.models) {
