@@ -484,6 +484,25 @@ async function scheduled(
       const testLogs = await testProc.getLogs();
       console.log('[cron] Telegram test result:', testLogs.stdout || testLogs.stderr || '(no output)');
     }
+
+    // Test Discord connectivity from inside container
+    if (env.DISCORD_BOT_TOKEN) {
+      console.log('[cron] Testing Discord connectivity...');
+      const discordTestProc = await sandbox.startProcess(
+        `curl -s -H "Authorization: Bot ${env.DISCORD_BOT_TOKEN}" "https://discord.com/api/v10/users/@me" | head -500`
+      );
+      await new Promise(r => setTimeout(r, 5000));
+      const discordLogs = await discordTestProc.getLogs();
+      console.log('[cron] Discord test result:', discordLogs.stdout || discordLogs.stderr || '(no output)');
+
+      // Also check session start limit to see if bot has connected
+      const sessionTestProc = await sandbox.startProcess(
+        `curl -s -H "Authorization: Bot ${env.DISCORD_BOT_TOKEN}" "https://discord.com/api/v10/gateway/bot" | head -500`
+      );
+      await new Promise(r => setTimeout(r, 5000));
+      const sessionLogs = await sessionTestProc.getLogs();
+      console.log('[cron] Discord gateway info:', sessionLogs.stdout || sessionLogs.stderr || '(no output)');
+    }
   } catch (debugErr) {
     console.error('[cron] Debug info failed:', debugErr);
   }

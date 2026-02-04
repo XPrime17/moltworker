@@ -341,14 +341,20 @@ echo "=== END CONFIG ==="
 # Check clawdbot version
 echo "Clawdbot version: $(clawdbot --version 2>&1)"
 
-# Export all telegram vars
+# Export all channel vars
 export TELEGRAM_BOT_TOKEN
 export TELEGRAM_DM_POLICY
+export DISCORD_BOT_TOKEN
+export DISCORD_DM_POLICY
 
 # Debug environment
 echo "Environment check:"
 echo "  TELEGRAM_BOT_TOKEN set: ${TELEGRAM_BOT_TOKEN:+yes}"
+echo "  TELEGRAM_BOT_TOKEN length: ${#TELEGRAM_BOT_TOKEN}"
 echo "  TELEGRAM_DM_POLICY: ${TELEGRAM_DM_POLICY:-not set}"
+echo "  DISCORD_BOT_TOKEN set: ${DISCORD_BOT_TOKEN:+yes}"
+echo "  DISCORD_BOT_TOKEN length: ${#DISCORD_BOT_TOKEN}"
+echo "  DISCORD_DM_POLICY: ${DISCORD_DM_POLICY:-not set}"
 echo "  CLAWDBOT_GATEWAY_TOKEN set: ${CLAWDBOT_GATEWAY_TOKEN:+yes}"
 
 if [ -n "$CLAWDBOT_GATEWAY_TOKEN" ]; then
