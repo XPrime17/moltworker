@@ -63,6 +63,41 @@ publicRoutes.get('/_admin/assets/*', async (c) => {
   return c.env.ASSETS.fetch(new Request(assetUrl.toString(), c.req.raw));
 });
 
+// POST /telegram/webhook - Telegram webhook endpoint (MUST be public for Telegram to reach it)
+// This proxies webhook calls to the clawdbot gateway running inside the container
+publicRoutes.post('/telegram/webhook', async (c) => {
+  const sandbox = c.get('sandbox');
+
+  try {
+    const body = await c.req.text();
+    console.log('[telegram-webhook] Received update:', body.slice(0, 500));
+
+    // Forward to clawdbot gateway's webhook endpoint
+    // The gateway listens on port 18789 and has a /telegram/webhook endpoint
+    const gatewayUrl = `http://localhost:${MOLTBOT_PORT}/telegram/webhook`;
+
+    const response = await sandbox.fetch(gatewayUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: body,
+    });
+
+    const responseText = await response.text();
+    console.log('[telegram-webhook] Gateway response:', response.status, responseText.slice(0, 200));
+
+    return new Response(responseText, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[telegram-webhook] Error:', err);
+    // Return 200 to Telegram to prevent retries
+    return c.json({ ok: true, error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 // GET /debug-public - Temporary public debug endpoint (no auth)
 publicRoutes.get('/debug-public', async (c) => {
   const sandbox = c.get('sandbox');
