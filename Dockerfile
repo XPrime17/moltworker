@@ -32,8 +32,8 @@ RUN mkdir -p /root/.clawdbot \
     && mkdir -p /root/clawd \
     && mkdir -p /root/clawd/skills
 
-# Copy startup script
-# Build cache bust: 2026-02-03-fix-telegram-polling
+# Copy startup script - ARG invalidates cache when value changes
+ARG CACHE_BUST=2026-02-04-0538-discord-fix
 COPY start-moltbot.sh /usr/local/bin/start-moltbot.sh
 RUN chmod +x /usr/local/bin/start-moltbot.sh
 

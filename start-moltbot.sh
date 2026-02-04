@@ -236,6 +236,12 @@ if (process.env.DISCORD_BOT_TOKEN) {
     if (discordDmPolicy === 'open') {
         config.channels.discord.dm.allowFrom = ['*'];
     }
+
+    // Enable discord plugin (required for channel to actually start)
+    config.plugins = config.plugins || {};
+    config.plugins.entries = config.plugins.entries || {};
+    config.plugins.entries.discord = config.plugins.entries.discord || {};
+    config.plugins.entries.discord.enabled = true;
 }
 
 // Slack configuration
