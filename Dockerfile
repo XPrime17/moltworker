@@ -36,7 +36,7 @@ RUN mkdir -p /root/.clawdbot \
     && mkdir -p /root/clawd/skills
 
 # Copy startup script - ARG invalidates cache when value changes
-ARG CACHE_BUST=2026-02-04-0643-tailscale-fix2
+ARG CACHE_BUST=2026-02-05-015630-identity
 COPY start-moltbot.sh /usr/local/bin/start-moltbot.sh
 RUN chmod +x /usr/local/bin/start-moltbot.sh
 

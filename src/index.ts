@@ -200,6 +200,9 @@ app.use('*', async (c, next) => {
     '/logo.png',
     '/logo-small.png',
     '/cdp',
+    // Webhooks must be public so external services (Telegram, Discord) can POST to them
+    '/telegram/webhook',
+    '/discord/webhook',
   ];
   if (publicPaths.some(path => url.pathname === path || url.pathname.startsWith(path + '/'))) {
     return next();
