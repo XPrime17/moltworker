@@ -8,6 +8,16 @@ import { R2_MOUNT_PATH } from '../config';
 const CLI_TIMEOUT_MS = 20000;
 
 /**
+ * Validate requestId format to prevent command injection.
+ * Only allows alphanumeric characters, hyphens, and underscores (UUID-safe).
+ */
+function isValidRequestId(requestId: string): boolean {
+  // Allow alphanumeric, hyphens, underscores - typical UUID/ID format
+  // Max length 64 to prevent abuse
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(requestId);
+}
+
+/**
  * API routes
  * - /api/admin/* - Protected admin API routes (Cloudflare Access required)
  * 
@@ -80,11 +90,17 @@ adminApi.post('/devices/:requestId/approve', async (c) => {
     return c.json({ error: 'requestId is required' }, 400);
   }
 
+  // Security: Validate requestId format to prevent command injection
+  if (!isValidRequestId(requestId)) {
+    return c.json({ error: 'Invalid requestId format. Only alphanumeric, hyphens, and underscores allowed.' }, 400);
+  }
+
   try {
     // Ensure moltbot is running first
     await ensureMoltbotGateway(sandbox, c.env);
 
     // Run moltbot CLI to approve the device (CLI is still named clawdbot)
+    // Note: requestId is validated above to be safe for shell interpolation
     const proc = await sandbox.startProcess(`clawdbot devices approve ${requestId} --url ws://localhost:18789`);
     await waitForProcess(proc, CLI_TIMEOUT_MS);
 
@@ -143,6 +159,16 @@ adminApi.post('/devices/approve-all', async (c) => {
     const results: Array<{ requestId: string; success: boolean; error?: string }> = [];
 
     for (const device of pending) {
+      // Security: Validate requestId even from CLI output (defense in depth)
+      if (!isValidRequestId(device.requestId)) {
+        results.push({
+          requestId: device.requestId,
+          success: false,
+          error: 'Invalid requestId format',
+        });
+        continue;
+      }
+
       try {
         const approveProc = await sandbox.startProcess(`clawdbot devices approve ${device.requestId} --url ws://localhost:18789`);
         await waitForProcess(approveProc, CLI_TIMEOUT_MS);

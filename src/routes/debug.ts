@@ -124,10 +124,31 @@ debug.get('/gateway-api', async (c) => {
 });
 
 // GET /debug/cli - Test moltbot CLI commands (CLI is still named clawdbot)
+// Security: Only whitelisted commands are allowed to prevent command injection
+const ALLOWED_CLI_COMMANDS = [
+  'clawdbot --help',
+  'clawdbot --version',
+  'clawdbot doctor',
+  'clawdbot devices list',
+  'clawdbot devices list --json',
+  'clawdbot config show',
+] as const;
+
 debug.get('/cli', async (c) => {
   const sandbox = c.get('sandbox');
-  const cmd = c.req.query('cmd') || 'clawdbot --help';
-  
+  const requestedCmd = c.req.query('cmd') || 'clawdbot --help';
+
+  // Security: Validate command against whitelist
+  if (!ALLOWED_CLI_COMMANDS.includes(requestedCmd as typeof ALLOWED_CLI_COMMANDS[number])) {
+    return c.json({
+      error: 'Command not allowed',
+      hint: 'Only whitelisted clawdbot commands are permitted',
+      allowed: ALLOWED_CLI_COMMANDS,
+    }, 403);
+  }
+
+  const cmd = requestedCmd;
+
   try {
     const proc = await sandbox.startProcess(cmd);
     
